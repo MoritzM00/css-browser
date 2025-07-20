@@ -27,6 +27,11 @@ function* getValuesBySelectors(obj, selectors) {
   }
 }
 
+/* replace characters not allowed in timeseries names */
+function sanitizeKey(name) {
+  return name.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
 document.getElementById("subject").value = Math.floor(
   (1 + Math.random()) * 0x10000
 ).toString(16);
@@ -102,6 +107,14 @@ fetch(
         },
       };
 
+      // create sanitized key lists and maps for each sensor
+      for (const sensor of Object.values(sensors)) {
+        sensor.sanitizedKeys = sensor.keys.map((k) => sanitizeKey(k));
+        sensor.keyMap = Object.fromEntries(
+          sensor.keys.map((k) => [k, sanitizeKey(k)])
+        );
+      }
+
       async function start_recording() {
         for (var [sensor, fun] of Object.entries(sensors)) {
           fun.collector = await edgeML.datasetCollector(
@@ -109,7 +122,7 @@ fetch(
             "5fe6e50c3fb5001531bbd8e03a8c591f", // API-Key
             sensor, // Name for the dataset
             false, // False to provide own timestamps
-            fun.keys, // Name of the time-series to create in the dataset
+            fun.sanitizedKeys, // Name of the time-series to create in the dataset
             Object.assign(
               {
                 participantId: document.getElementById("subject").value,
@@ -178,7 +191,7 @@ fetch(
           if (value !== null) {
             sensors[eventtype].collector.addDataPoint(
               Math.floor(eventtime),
-              key,
+              sensors[eventtype].keyMap[key] || key,
               value
             );
           }
@@ -191,7 +204,7 @@ fetch(
           if (value !== null) {
             sensors[eventtype].classifier.addDataPoint(
               Math.floor(eventtime),
-              key,
+              sensors[eventtype].keyMap[key] || key,
               value
             );
           }
