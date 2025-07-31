@@ -1,40 +1,55 @@
+// Main entry point for the browser demo.
+// Allows recording motion data and classifying activities.
+
 /* 
 TODO: request permission on iphone (https://stackoverflow.com/a/58685549)
 TODO: add more sensor using SensorAPI https://developer.mozilla.org/en-US/docs/Web/API/Sensor_APIs
 TODO: add audio or video features?
 */
+// Core library used for data collection and machine learning predictions
 import edgeML from "@triedel/edge-ml";
+// Helper to detect the current browser/mobile device
 import MobileDetect from "mobile-detect";
+// SystemJS is used to load the model code at runtime
 import System from "systemjs";
 
 /* evalutate property path separated by "." */
+// Resolve a set of dot separated selectors on an object and yield the values
 function* getValuesBySelectors(obj, selectors) {
+  // Iterate over each selector string
   for (const selector of selectors) {
+    // Split selector into nested property names
     const properties = selector.split(".");
     let value = obj;
 
+    // Walk down the property path
     for (const property of properties) {
       if (typeof value === "object" && property in value) {
+        // Step deeper in the object hierarchy
         value = value[property];
       } else {
-        // Property not found, yield null
+        // Property does not exist -> mark as missing
         value = null;
         break;
       }
     }
 
+    // Yield the selector together with the resolved value
     yield [selector, value];
   }
 }
+// Generate a random participant id on load
 
 document.getElementById("subject").value = Math.floor(
   (1 + Math.random()) * 0x10000
 ).toString(16);
 
+// Tags that will be sent with every dataset record
 var defaultTags = {};
 
-var timer;
+var timer; // Interval used during classification
 
+// Detect browser and platform information
 const mobile = new MobileDetect(window.navigator.userAgent);
 
 if (mobile.mobile()) {
@@ -44,6 +59,7 @@ if (mobile.mobile()) {
 if (mobile.userAgent()) {
   defaultTags.browser = mobile.userAgent();
 }
+// Load the pre-trained model script from the server
 
 fetch(
   "https://gitlab.kit.edu/api/v4/projects/173274/repository/files/data_snapshot%2Fdeviceorientation_model.mjs/raw?ref=master"
@@ -102,6 +118,9 @@ fetch(
         },
       };
 
+      /**
+       * Start recording sensor data and upload it using edge-ml.
+       */
       async function start_recording() {
         for (var [sensor, fun] of Object.entries(sensors)) {
           fun.collector = await edgeML.datasetCollector(
@@ -124,8 +143,10 @@ fetch(
         }
       }
 
+      /**
+       * Start live classification using the loaded model.
+       */
       async function start_classifying() {
-        for (var [sensor, f] of Object.entries(sensors)) {
           const fun = f;
           if ("score" in fun) {
             fun.classifier = await new edgeML.Predictor(
@@ -157,6 +178,9 @@ fetch(
         }
       }
 
+      /**
+       * Stop recording and finalize dataset uploads.
+       */
       async function stop_recording() {
         for (const [sensor, fun] of Object.entries(sensors)) {
           window.removeEventListener(sensor, fun.record, true);
@@ -164,6 +188,9 @@ fetch(
         }
       }
 
+      /**
+       * Stop the classifier and remove all listeners.
+       */
       async function stop_classifying() {
         for (const [sensor, fun] of Object.entries(sensors)) {
           if ("score" in fun) {
@@ -172,8 +199,12 @@ fetch(
         }
       }
 
+      /**
+       * Add a data point to the recording collector.
+       * The timestamp is provided by the event.
+       */
       function record(eventtype, fields, eventtime) {
-        // time at which the event happend
+        // time at which the event happened
         for (const [key, value] of Object.entries(fields)) {
           if (value !== null) {
             sensors[eventtype].collector.addDataPoint(
@@ -185,8 +216,12 @@ fetch(
         }
       }
 
+      /**
+       * Add a data point to the classifier.
+       * The timestamp is provided by the event.
+       */
       function score(eventtype, fields, eventtime) {
-        // time at which the event happend
+        // time at which the event happened
         for (const [key, value] of Object.entries(fields)) {
           if (value !== null) {
             sensors[eventtype].classifier.addDataPoint(
@@ -198,6 +233,10 @@ fetch(
         }
       }
 
+
+
+// Toggle recording when the checkbox is changed
+
       // Wir schalten einen Timer an/aus mit der checkbox
       document.getElementById("record").onchange = function () {
         if (this.checked) {
@@ -208,6 +247,7 @@ fetch(
           document.getElementById("debug").innerHTML = "Not recording.";
         }
       };
+// Toggle live classification using the checkbox
 
       // Wir schalten einen Timer an/aus mit der checkbox
       document.getElementById("classify").onchange = function () {
