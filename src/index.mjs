@@ -209,29 +209,42 @@ fetch(
           return; // Exit function early if permissions are not granted
         }
 
-        // Iterate through each sensor configuration (deviceorientation, devicemotion)
-        for (var [sensor, fun] of Object.entries(sensors)) {
-          // Create a data collector for this sensor using EdgeML
-          fun.collector = await edgeML.datasetCollector(
-            "https://edge-ml-beta.dmz.teco.edu", // Backend URL where data will be sent
-            "5fe6e50c3fb5001531bbd8e03a8c591f", // API key for authentication with the backend
-            sensor, // Name for the dataset (e.g., "deviceorientation", "devicemotion")
-            false, // False indicates we will provide our own timestamps instead of using server timestamps
-            fun.keys, // Array of time-series names to create in the dataset
-            // Merge participant/activity info with default device tags
-            Object.assign(
-              {
-                participantId: document.getElementById("subject").value, // Get participant ID from form
-                activity: document.getElementById("label").value,        // Get activity label from form
-              },
-              defaultTags // Add browser/mobile device information
-            ),
-            "activity_" + document.getElementById("label").value // Label prefix for the dataset
-          );
+        try {
+          // Iterate through each sensor configuration (deviceorientation, devicemotion)
+          for (var [sensor, fun] of Object.entries(sensors)) {
+            console.log("Setting up data collector for sensor:", sensor, "with keys:", fun.keys);
+            
+            // Create a data collector for this sensor using EdgeML
+            fun.collector = await edgeML.datasetCollector(
+              "https://edge-ml-beta.dmz.teco.edu", // Backend URL where data will be sent
+              "5fe6e50c3fb5001531bbd8e03a8c591f", // API key for authentication with the backend
+              sensor, // Name for the dataset (e.g., "deviceorientation", "devicemotion")
+              false, // False indicates we will provide our own timestamps instead of using server timestamps
+              fun.keys, // Array of time-series names to create in the dataset
+              // Merge participant/activity info with default device tags
+              Object.assign(
+                {
+                  participantId: document.getElementById("subject").value, // Get participant ID from form
+                  activity: document.getElementById("label").value,        // Get activity label from form
+                },
+                defaultTags // Add browser/mobile device information
+              ),
+              "activity_" + document.getElementById("label").value // Label prefix for the dataset
+            );
 
-          // Register event listener to capture sensor data when events occur
-          // 'true' parameter enables capturing phase (events are captured before bubbling)
-          window.addEventListener(sensor, fun.record, true);
+            console.log("Data collector created successfully for", sensor);
+
+            // Register event listener to capture sensor data when events occur
+            // 'true' parameter enables capturing phase (events are captured before bubbling)
+            window.addEventListener(sensor, fun.record, true);
+          }
+          
+          // Update debug display to show recording is active
+          document.getElementById("debug").innerHTML = "Recording started successfully.";
+        } catch (error) {
+          console.error("Error setting up data collectors:", error);
+          document.getElementById("record").checked = false;
+          document.getElementById("debug").innerHTML = "Error starting recording: " + error.message;
         }
       }
 
@@ -317,8 +330,23 @@ fetch(
        * @param {number} eventtime - Timestamp when the event occurred
        */
       function record(eventtype, fields, eventtime) {
+        // Check if the sensor configuration exists
+        if (!sensors[eventtype]) {
+          console.error("Unknown sensor type:", eventtype);
+          return;
+        }
+        
+        // Check if the data collector is properly initialized
+        if (!sensors[eventtype].collector) {
+          console.error("Data collector not initialized for sensor:", eventtype);
+          return;
+        }
+        
         // Get the valid keys for this sensor type that were declared in the data collector
         const validKeys = sensors[eventtype].keys;
+        
+        // Debug: Log the incoming fields and valid keys
+        console.log("Recording data for", eventtype, "- Fields:", Object.keys(fields), "- Valid keys:", validKeys);
         
         // Iterate through each field in the sensor data
         for (const [key, value] of Object.entries(fields)) {
@@ -327,12 +355,19 @@ fetch(
           // 2. Are valid numbers (not NaN)
           // 3. Are in the declared keys list for this sensor
           if (value !== null && value !== undefined && !isNaN(value) && validKeys.includes(key)) {
-            // Add the data point to the appropriate sensor's data collector
-            sensors[eventtype].collector.addDataPoint(
-              Math.floor(eventtime), // Convert timestamp to integer milliseconds
-              key,                   // The sensor field name (e.g., "alpha", "acceleration.x")
-              value                  // The actual sensor reading value
-            );
+            try {
+              // Add the data point to the appropriate sensor's data collector
+              sensors[eventtype].collector.addDataPoint(
+                Math.floor(eventtime), // Convert timestamp to integer milliseconds
+                key,                   // The sensor field name (e.g., "alpha", "acceleration.x")
+                value                  // The actual sensor reading value
+              );
+              console.log("Successfully recorded:", key, "=", value);
+            } catch (error) {
+              console.error("Error recording data point:", error, "Key:", key, "Value:", value, "Valid keys:", validKeys);
+            }
+          } else {
+            console.log("Skipping invalid data:", key, "=", value, "Valid:", validKeys.includes(key), "Not null:", value !== null && value !== undefined, "Not NaN:", !isNaN(value));
           }
         }
       }
@@ -368,10 +403,10 @@ fetch(
       document.getElementById("record").onchange = function () {
         // Check if the checkbox is now checked (recording should start)
         if (this.checked) {
+          // Update the debug display to show we're starting
+          document.getElementById("debug").innerHTML = "Starting recording...";
           // Start recording sensor data for training
           start_recording();
-          // Update the debug display to show recording status
-          document.getElementById("debug").innerHTML = "Recording.";
         } else {
           // Stop recording sensor data
           stop_recording();
