@@ -317,10 +317,16 @@ fetch(
        * @param {number} eventtime - Timestamp when the event occurred
        */
       function record(eventtype, fields, eventtime) {
+        // Get the valid keys for this sensor type that were declared in the data collector
+        const validKeys = sensors[eventtype].keys;
+        
         // Iterate through each field in the sensor data
         for (const [key, value] of Object.entries(fields)) {
-          // Only record non-null values to avoid corrupting the dataset
-          if (value !== null) {
+          // Only record values that are:
+          // 1. Not null or undefined
+          // 2. Are valid numbers (not NaN)
+          // 3. Are in the declared keys list for this sensor
+          if (value !== null && value !== undefined && !isNaN(value) && validKeys.includes(key)) {
             // Add the data point to the appropriate sensor's data collector
             sensors[eventtype].collector.addDataPoint(
               Math.floor(eventtime), // Convert timestamp to integer milliseconds
@@ -338,10 +344,16 @@ fetch(
        * @param {number} eventtime - Timestamp when the event occurred
        */
       function score(eventtype, fields, eventtime) {
+        // Get the valid keys for this sensor type (only for sensors that have classification)
+        const validKeys = sensors[eventtype].keys;
+        
         // Iterate through each field in the sensor data
         for (const [key, value] of Object.entries(fields)) {
-          // Only feed non-null values to the classifier
-          if (value !== null) {
+          // Only feed values that are:
+          // 1. Not null or undefined
+          // 2. Are valid numbers (not NaN) 
+          // 3. Are in the declared keys list for this sensor
+          if (value !== null && value !== undefined && !isNaN(value) && validKeys.includes(key)) {
             // Add the data point to the appropriate sensor's classifier
             sensors[eventtype].classifier.addDataPoint(
               Math.floor(eventtime), // Convert timestamp to integer milliseconds
