@@ -1,6 +1,5 @@
 /* 
  * TODO LIST:
- * - Request permission on iPhone (https://stackoverflow.com/a/58685549)
  * - Add more sensors using SensorAPI https://developer.mozilla.org/en-US/docs/Web/API/Sensor_APIs
  * - Add audio or video features for extended data collection
  */
@@ -157,10 +156,59 @@ fetch(
       };
 
       /**
+       * Asynchronous function to request sensor permissions on iOS devices
+       * @returns {boolean} - True if permissions are granted, false otherwise
+       */
+      async function requestSensorPermissions() {
+        // Check if we're on iOS and permission API is available
+        if (
+          typeof DeviceMotionEvent !== "undefined" &&
+          typeof DeviceMotionEvent.requestPermission === "function"
+        ) {
+          try {
+            // Request permission for device motion events (accelerometer, gyroscope)
+            const motionPermission = await DeviceMotionEvent.requestPermission();
+            // Request permission for device orientation events (compass)
+            const orientationPermission =
+              await DeviceOrientationEvent.requestPermission();
+
+            // Check if both permissions were granted
+            if (
+              motionPermission !== "granted" ||
+              orientationPermission !== "granted"
+            ) {
+              // Show alert if permissions were denied
+              alert("Sensor permission was denied. Recording will not start.");
+              return false;
+            }
+
+            // Both permissions granted successfully
+            return true;
+          } catch (err) {
+            // Handle any errors during permission request
+            console.error("Error requesting permission:", err);
+            alert("Error requesting permission. Recording will not start.");
+            return false;
+          }
+        }
+        // If no permission API is required (e.g., Android devices)
+        return true;
+      }
+
+      /**
        * Asynchronous function to start recording sensor data for machine learning training
        * Sets up data collectors for each sensor type and registers event listeners
        */
       async function start_recording() {
+        // Request sensor permissions (required on iOS devices)
+        const permissionGranted = await requestSensorPermissions();
+        if (!permissionGranted) {
+          // Uncheck the record checkbox and display permission denied message
+          document.getElementById("record").checked = false;
+          document.getElementById("debug").innerHTML = "Permission denied.";
+          return; // Exit function early if permissions are not granted
+        }
+
         // Iterate through each sensor configuration (deviceorientation, devicemotion)
         for (var [sensor, fun] of Object.entries(sensors)) {
           // Create a data collector for this sensor using EdgeML
